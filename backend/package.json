@@ -1,0 +1,26 @@
+{
+  "name": "smart-event-booking-backend",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "migrate": "node scripts/runMigration.js",
+    "seed:admin": "node scripts/seedAdmin.js",
+    "seed:events": "node scripts/seedEvents.js",
+    "test:integration": "node scripts/comprehensive_test.mjs"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^16.0.0",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.3",
+    "mysql2": "^3.9.0",
+    "socket.io": "^4.7.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}

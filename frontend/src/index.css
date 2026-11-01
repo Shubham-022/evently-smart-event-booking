@@ -1,0 +1,115 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    @apply bg-brand-darker text-white font-sans;
+    background: #07060F;
+  }
+
+  ::selection {
+    @apply bg-brand-purple text-white;
+  }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-brand-darker; }
+  ::-webkit-scrollbar-thumb { @apply bg-brand-purple rounded-full; }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, #A78BFA 0%, #7C3AED 50%, #EC4899 100%);
+  }
+
+  .border-gradient {
+    border: 1px solid transparent;
+    background-clip: padding-box;
+    -webkit-mask:
+      linear-gradient(#fff 0 0) padding-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: destination-out;
+    mask-composite: exclude;
+  }
+
+  .glass {
+    background: rgba(19, 16, 43, 0.7);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(124, 58, 237, 0.18);
+  }
+
+  .glass-light {
+    background: rgba(124, 58, 237, 0.08);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(139, 92, 246, 0.2);
+  }
+
+  .glow-purple {
+    box-shadow: 0 0 30px rgba(124, 58, 237, 0.35),
+                0 0 60px rgba(124, 58, 237, 0.15);
+  }
+
+  .glow-purple-sm {
+    box-shadow: 0 0 15px rgba(124, 58, 237, 0.3);
+  }
+
+  .section-padding {
+    @apply py-20 px-4 md:px-8 lg:px-16 xl:px-24;
+  }
+
+  .container-max {
+    @apply max-w-7xl mx-auto;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-7 py-3.5 rounded-xl font-semibold
+           text-white bg-gradient-to-r from-brand-purple to-brand-violet
+           hover:from-brand-violet hover:to-purple-400
+           transition-all duration-300 hover:scale-105 hover:shadow-lg
+           hover:shadow-brand-purple/40 active:scale-100;
+  }
+
+  .btn-outline {
+    @apply inline-flex items-center gap-2 px-7 py-3.5 rounded-xl font-semibold
+           text-brand-lavender border border-brand-purple/50
+           hover:border-brand-violet hover:bg-brand-purple/10
+           transition-all duration-300 hover:scale-105;
+  }
+
+  .card-event {
+    @apply glass rounded-2xl overflow-hidden
+           hover:border-brand-purple/40 hover:-translate-y-1
+           transition-all duration-300 cursor-pointer;
+  }
+
+  .section-label {
+    @apply inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold
+           tracking-widest uppercase text-brand-lavender
+           bg-brand-purple/15 border border-brand-purple/30;
+  }
+}
+
+/* Animated gradient orbs in hero */
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  animation: pulse-orb 8s ease-in-out infinite;
+}
+
+@keyframes pulse-orb {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50%       { opacity: 0.8; transform: scale(1.12); }
+}
