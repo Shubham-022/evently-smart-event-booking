@@ -15,6 +15,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { getEventById, getEventSeats, getRelatedEvents } from '../services/eventsService';
 import { socket } from '../services/socket';
 import { generateFallbackSeats } from '../utils/seatLayout';
+import { eventImgSrc, FALLBACK_IMG } from '../utils/eventUtils';
 
 const TICKET_CATEGORIES = [
   {
@@ -298,7 +299,7 @@ export default function EventDetailsPage() {
   const selectedCount = selectedSeats.length;
   const totalAmount = unitPrice * (selectedCount > 0 ? selectedCount : 1);
 
-  const coverImage = event.img || `https://picsum.photos/seed/${event.id}/1200/500`;
+  const coverImage = eventImgSrc(event);
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`;
 
   return (
@@ -321,18 +322,24 @@ export default function EventDetailsPage() {
           </button>
 
           {/* Cover image banner */}
-          <div className="relative w-full h-64 md:h-96 rounded-2xl overflow-hidden mb-8 border border-brand-border shadow-xl">
+          <div className="relative w-full h-64 md:h-96 rounded-2xl overflow-hidden mb-8 border border-brand-border shadow-xl bg-brand-dark/50">
             <img
               src={coverImage}
               alt={event.title}
-              className="w-full h-full object-cover"
+              loading="eager"
+              className="w-full h-full object-cover object-center"
+              onError={(e) => {
+                if (e.target.src !== FALLBACK_IMG) {
+                  e.target.src = FALLBACK_IMG;
+                }
+              }}
             />
             {event.category && (
               <div className="absolute top-4 left-4 glass px-3.5 py-1 rounded-full text-xs font-semibold text-brand-lavender bg-brand-dark/80 border border-brand-purple/40">
                 {event.category}
               </div>
             )}
-            <div className="absolute inset-0 bg-gradient-to-t from-brand-darker via-transparent to-transparent opacity-80" />
+            <div className="absolute inset-0 bg-gradient-to-t from-brand-darker via-brand-darker/30 to-transparent opacity-90 pointer-events-none" />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

@@ -3,7 +3,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Calendar, MapPin, Users, Clock, Ticket, ArrowRight, Tag } from 'lucide-react';
-import { formatDate, formatTime, formatPrice, seatStatus, eventImgSrc } from '../utils/eventUtils';
+import { formatDate, formatTime, formatPrice, seatStatus, eventImgSrc, FALLBACK_IMG } from '../utils/eventUtils';
 
 const cardVariants = {
   hidden:  { opacity: 0, y: 35, scale: 0.98 },
@@ -32,15 +32,21 @@ export default function EventCard({ event, index = 0, variant = 'grid' }) {
         whileHover={{ x: 4, transition: { duration: 0.2 } }}
         className="card-event flex flex-col sm:flex-row group border border-brand-border/60 hover:border-brand-purple/40 transition-all rounded-2xl overflow-hidden glass"
       >
-        {/* Image */}
-        <div className="relative sm:w-56 md:w-64 shrink-0 h-48 sm:h-auto overflow-hidden">
+        {/* Image - 16:9 Aspect Ratio with subtle readable overlay */}
+        <div className="relative sm:w-64 md:w-72 shrink-0 aspect-[16/9] sm:aspect-auto sm:h-auto overflow-hidden bg-brand-dark/50">
           <img
             src={imgSrc}
             alt={event.title}
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-            onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80'; }}
+            loading="lazy"
+            decoding="async"
+            className="w-full h-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-105"
+            onError={(e) => {
+              if (e.target.src !== FALLBACK_IMG) {
+                e.target.src = FALLBACK_IMG;
+              }
+            }}
           />
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent to-brand-dark/40 sm:bg-gradient-to-l" />
+          <div className="absolute inset-0 bg-gradient-to-t from-brand-dark via-brand-dark/30 to-brand-dark/10 sm:bg-gradient-to-r sm:from-transparent sm:via-transparent sm:to-brand-dark/70 pointer-events-none" />
 
           {/* Category Pill */}
           {event.category && (
@@ -108,15 +114,21 @@ export default function EventCard({ event, index = 0, variant = 'grid' }) {
       whileHover={{ y: -6, transition: { duration: 0.22 } }}
       className="card-event group flex flex-col border border-brand-border/60 hover:border-brand-purple/40 transition-all rounded-2xl overflow-hidden glass"
     >
-      {/* Image */}
-      <div className="relative overflow-hidden h-52">
+      {/* Image - 16:9 Aspect Ratio with subtle readable overlay */}
+      <div className="relative overflow-hidden w-full aspect-[16/9] bg-brand-dark/50">
         <img
           src={imgSrc}
           alt={event.title}
-          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-          onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80'; }}
+          loading="lazy"
+          decoding="async"
+          className="w-full h-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-105"
+          onError={(e) => {
+            if (e.target.src !== FALLBACK_IMG) {
+              e.target.src = FALLBACK_IMG;
+            }
+          }}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-brand-dark/90 via-brand-dark/20 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-brand-dark via-brand-dark/30 to-brand-dark/15 pointer-events-none" />
 
         {/* Category Pill */}
         {event.category && (

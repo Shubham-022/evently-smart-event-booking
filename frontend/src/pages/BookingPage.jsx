@@ -11,6 +11,7 @@ import Footer from '../components/Footer';
 import { useAuth } from '../contexts/AuthContext';
 import { getEventById } from '../services/eventsService';
 import { createBooking } from '../services/bookingsService';
+import { eventImgSrc, FALLBACK_IMG } from '../utils/eventUtils';
 
 const TIER_META = {
   General: { multiplier: 1.0, badge: 'Standard Entry', icon: Ticket, color: 'text-blue-400 border-blue-500/30 bg-blue-500/10' },
@@ -171,7 +172,7 @@ export default function BookingPage() {
   const unitPrice = Math.round(basePrice * tierInfo.multiplier);
   const totalAmount = unitPrice * Number(passedQuantity);
   const eventDate = new Date(event.date);
-  const coverImage = event.img || `https://picsum.photos/seed/${event.id}/800/400`;
+  const coverImage = eventImgSrc(event);
   const TierIcon = tierInfo.icon;
 
   return (
@@ -223,11 +224,19 @@ export default function BookingPage() {
             {/* Left: Event summary & selected tier */}
             <div className="lg:col-span-2">
               <div className="glass rounded-2xl overflow-hidden sticky top-24 border border-brand-border shadow-xl">
-                <img
-                  src={coverImage}
-                  alt={event.title}
-                  className="w-full h-44 object-cover"
-                />
+                <div className="relative w-full aspect-[16/9] overflow-hidden bg-brand-dark/50">
+                  <img
+                    src={coverImage}
+                    alt={event.title}
+                    className="w-full h-full object-cover object-center"
+                    onError={(e) => {
+                      if (e.target.src !== FALLBACK_IMG) {
+                        e.target.src = FALLBACK_IMG;
+                      }
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-brand-dark/80 via-transparent to-transparent pointer-events-none" />
+                </div>
                 <div className="p-6">
                   {/* Category Pill */}
                   <div className="flex items-center justify-between mb-3">

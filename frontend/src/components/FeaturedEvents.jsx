@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Calendar, MapPin, Users, ArrowRight, Ticket, Clock } from 'lucide-react';
 import { getEvents } from '../services/eventsService';
+import { eventImgSrc, FALLBACK_IMG } from '../utils/eventUtils';
 
 const FALLBACK_EVENTS = [
   {
@@ -43,9 +44,7 @@ const cardVariants = {
 };
 
 function EventCard({ event, index }) {
-  const imgSrc = event.img
-    ? event.img
-    : `https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80`;
+  const imgSrc = eventImgSrc(event);
 
   return (
     <motion.div
@@ -57,17 +56,21 @@ function EventCard({ event, index }) {
       whileHover={{ y: -6, transition: { duration: 0.25 } }}
       className="card-event group flex flex-col"
     >
-      {/* Image */}
-      <div className="relative overflow-hidden h-52">
+      {/* Image - 16:9 Aspect Ratio with subtle readable overlay */}
+      <div className="relative overflow-hidden w-full aspect-[16/9] bg-brand-dark/50">
         <img
           src={imgSrc}
           alt={event.title}
-          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+          loading="lazy"
+          decoding="async"
+          className="w-full h-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-105"
           onError={(e) => {
-            e.target.src = 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80';
+            if (e.target.src !== FALLBACK_IMG) {
+              e.target.src = FALLBACK_IMG;
+            }
           }}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-brand-dark/90 via-brand-dark/30 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-brand-dark via-brand-dark/30 to-brand-dark/15 pointer-events-none" />
         {/* Price badge */}
         <div className="absolute top-3 right-3 glass px-3 py-1 rounded-full text-xs font-bold text-brand-lavender">
           {event.price === 0 ? 'FREE' : `₹${event.price}`}

@@ -51,14 +51,31 @@ export function seatStatus(available) {
 }
 
 /**
- * Fallback image URL
+ * Fallback image URL - High-definition 16:9 professional event photography
  */
 export const FALLBACK_IMG =
-  'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80';
+  'https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&w=1200&h=675&q=80';
 
 /**
- * Given an event object return a display image src
+ * Curated category-based fallbacks for realistic photography
+ */
+export const CATEGORY_FALLBACKS = {
+  Technology: 'https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=1200&h=675&q=80',
+  Conferences: 'https://images.unsplash.com/photo-1475721027785-f74eccf877e2?auto=format&fit=crop&w=1200&h=675&q=80',
+  Music: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=1200&h=675&q=80',
+  'Arts & Design': 'https://images.unsplash.com/photo-1587825140708-dfaf72ae4b04?auto=format&fit=crop&w=1200&h=675&q=80',
+  Sports: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=1200&h=675&q=80',
+};
+
+/**
+ * Given an event object return a high-quality display image src
  */
 export function eventImgSrc(event) {
-  return event?.img || FALLBACK_IMG;
+  if (event?.img && !event.img.includes('example.com')) {
+    return event.img;
+  }
+  if (event?.category && CATEGORY_FALLBACKS[event.category]) {
+    return CATEGORY_FALLBACKS[event.category];
+  }
+  return FALLBACK_IMG;
 }
