@@ -92,6 +92,14 @@ async function startServer() {
       console.warn('⚠️ Auto seat migration warning:', migErr.message);
     }
 
+    // Automatically update event images with professional photography
+    try {
+      const { updateEventImages } = await import('./scripts/updateEventImages.js');
+      await updateEventImages();
+    } catch (imgErr) {
+      console.warn('⚠️ Auto image update warning:', imgErr.message);
+    }
+
     const server = http.createServer(app);
     const io = new SocketIOServer(server, {
       cors: { origin: '*', methods: ['GET', 'POST'] },

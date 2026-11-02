@@ -33,7 +33,7 @@ const EVENTS = [
     total_seats:     300,
     available_seats: 187,
     price:           1999.00,
-    img:             'https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=800&q=80',
+    img:             'https://images.unsplash.com/photo-1511578314322-379afb476865?auto=format&fit=crop&w=1200&h=675&q=80',
   },
   {
     title:           'React Developer Meetup',
@@ -43,7 +43,7 @@ const EVENTS = [
     total_seats:     80,
     available_seats: 12,
     price:           199.00,
-    img:             'https://images.unsplash.com/photo-1517180102446-f3ece451e9d8?w=800&q=80',
+    img:             'https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=1200&h=675&q=80',
   },
   {
     title:           'Startup Founders Conference',
@@ -53,7 +53,7 @@ const EVENTS = [
     total_seats:     500,
     available_seats: 0,          // SOLD OUT
     price:           2999.00,
-    img:             'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&q=80',
+    img:             'https://images.unsplash.com/photo-1475721027785-f74eccf877e2?auto=format&fit=crop&w=1200&h=675&q=80',
   },
   {
     title:           'Full Stack Web Development Workshop',
@@ -63,7 +63,7 @@ const EVENTS = [
     total_seats:     60,
     available_seats: 38,
     price:           1499.00,
-    img:             'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=800&q=80',
+    img:             'https://images.unsplash.com/photo-1515378791036-0648a3ef77b2?auto=format&fit=crop&w=1200&h=675&q=80',
   },
   {
     title:           'Data Science Bootcamp',
@@ -73,7 +73,7 @@ const EVENTS = [
     total_seats:     100,
     available_seats: 6,          // LOW AVAILABILITY
     price:           2499.00,
-    img:             'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80',
+    img:             'https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=1200&h=675&q=80',
   },
   {
     title:           'Cyber Security Conference',
@@ -83,7 +83,7 @@ const EVENTS = [
     total_seats:     250,
     available_seats: 143,
     price:           1799.00,
-    img:             'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=800&q=80',
+    img:             'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=1200&h=675&q=80',
   },
   {
     title:           'Music Festival',
@@ -93,7 +93,7 @@ const EVENTS = [
     total_seats:     400,
     available_seats: 254,
     price:           799.00,
-    img:             'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&q=80',
+    img:             'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=1200&h=675&q=80',
   },
   {
     title:           'Entrepreneurship Summit',
@@ -103,7 +103,7 @@ const EVENTS = [
     total_seats:     350,
     available_seats: 201,
     price:           2499.00,
-    img:             'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=800&q=80',
+    img:             'https://images.unsplash.com/photo-1528605248644-14dd04022da1?auto=format&fit=crop&w=1200&h=675&q=80',
   },
   {
     title:           'Cloud Computing Workshop',
@@ -113,7 +113,7 @@ const EVENTS = [
     total_seats:     120,
     available_seats: 3,          // LOW AVAILABILITY
     price:           1999.00,
-    img:             'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&q=80',
+    img:             'https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=1200&h=675&q=80',
   },
   {
     title:           'UI/UX Design Masterclass',
@@ -123,7 +123,7 @@ const EVENTS = [
     total_seats:     75,
     available_seats: 48,
     price:           1299.00,
-    img:             'https://images.unsplash.com/photo-1587440871875-191322ee64b0?w=800&q=80',
+    img:             'https://images.unsplash.com/photo-1581291518857-4e27b48ff24e?auto=format&fit=crop&w=1200&h=675&q=80',
   },
   {
     title:           'Digital Marketing Conference',
@@ -133,7 +133,7 @@ const EVENTS = [
     total_seats:     200,
     available_seats: 133,
     price:           999.00,
-    img:             'https://images.unsplash.com/photo-1432888622747-4eb9a8efeb07?w=800&q=80',
+    img:             'https://images.unsplash.com/photo-1559223607-a43c990c692c?auto=format&fit=crop&w=1200&h=675&q=80',
   },
   {
     title:           'Blockchain Developer Meetup',
@@ -143,7 +143,7 @@ const EVENTS = [
     total_seats:     90,
     available_seats: 0,          // SOLD OUT
     price:           499.00,
-    img:             'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=800&q=80',
+    img:             'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1200&h=675&q=80',
   },
   {
     title:           'Photography Exhibition',
@@ -153,7 +153,7 @@ const EVENTS = [
     total_seats:     150,
     available_seats: 97,
     price:           299.00,
-    img:             'https://images.unsplash.com/photo-1452457750107-be624bca8cdb?w=800&q=80',
+    img:             'https://images.unsplash.com/photo-1587825140708-dfaf72ae4b04?auto=format&fit=crop&w=1200&h=675&q=80',
   },
   {
     title:           'Sports & Fitness Festival',
@@ -163,7 +163,7 @@ const EVENTS = [
     total_seats:     500,
     available_seats: 312,
     price:           599.00,
-    img:             'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=800&q=80',
+    img:             'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=1200&h=675&q=80',
   },
   {
     title:           'Generative AI Hackathon',
@@ -173,7 +173,7 @@ const EVENTS = [
     total_seats:     200,
     available_seats: 74,
     price:           399.00,
-    img:             'https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=800&q=80',
+    img:             'https://images.unsplash.com/photo-1504384764586-bb4cdc1707b0?auto=format&fit=crop&w=1200&h=675&q=80',
   },
 ];
 
