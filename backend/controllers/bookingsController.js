@@ -11,7 +11,7 @@ import { getUserBookingsService } from '../services/authService.js';
 /** Validate payload for creating a booking */
 function validateBookingPayload(payload) {
   const errors = [];
-  const { event_id, name, email, mobile, quantity, ticket_category } = payload;
+  const { event_id, name, email, mobile, quantity, ticket_category, seat_ids, seat_numbers } = payload;
 
   const eventIdNum = Number(event_id);
   if (!Number.isInteger(eventIdNum) || eventIdNum <= 0) {
@@ -26,10 +26,24 @@ function validateBookingPayload(payload) {
   if (!mobile || !/^\d{7,15}$/.test(String(mobile).replace(/[\s-]/g, ''))) {
     errors.push('mobile must be between 7 and 15 digits');
   }
-  const qtyNum = Number(quantity);
-  if (!Number.isInteger(qtyNum) || qtyNum <= 0) {
+
+  const seats = seat_ids || seat_numbers;
+  if (seats !== undefined && seats !== null) {
+    if (!Array.isArray(seats) || seats.length === 0) {
+      errors.push('seat_ids must be a non-empty array of seat identifiers');
+    } else {
+      const invalidSeat = seats.some(s => typeof s !== 'string' || !s.trim());
+      if (invalidSeat) {
+        errors.push('All seat_ids must be non-empty strings');
+      }
+    }
+  }
+
+  const effectiveQty = seats && Array.isArray(seats) && seats.length > 0 ? seats.length : Number(quantity);
+  if (!Number.isInteger(effectiveQty) || effectiveQty <= 0) {
     errors.push('quantity must be a positive integer greater than 0');
   }
+
   if (ticket_category && !['General', 'Premium', 'VIP'].includes(ticket_category)) {
     errors.push('ticket_category must be one of General, Premium, or VIP');
   }
@@ -52,7 +66,10 @@ export async function createBooking(req, res) {
   const { valid, errors } = validateBookingPayload(req.body);
   if (!valid) return res.status(400).json({ errors, error: errors[0] });
 
-  const { event_id, name, email, mobile, quantity, ticket_category = 'General' } = req.body;
+  const { event_id, name, email, mobile, quantity, ticket_category = 'General', seat_ids, seat_numbers } = req.body;
+  const seats = seat_ids || seat_numbers || null;
+  const effectiveQty = seats && Array.isArray(seats) && seats.length > 0 ? seats.length : Number(quantity);
+
   try {
     const result = await createBookingService({
       user_id: req.user.id,
@@ -60,8 +77,9 @@ export async function createBooking(req, res) {
       name: name.trim(),
       email: email.trim().toLowerCase(),
       mobile: String(mobile).replace(/[\s-]/g, ''),
-      quantity: Number(quantity),
+      quantity: effectiveQty,
       ticket_category: ticket_category || 'General',
+      seat_ids: seats,
     });
 
     if (result === null) return res.status(404).json({ error: 'Event not found' });
@@ -69,6 +87,12 @@ export async function createBooking(req, res) {
       return res.status(409).json({
         error: 'Insufficient seats',
         availableSeats: result.availableSeats,
+      });
+    }
+    if (result.seatError) {
+      return res.status(409).json({
+        error: result.message,
+        seats: result.seats,
       });
     }
 

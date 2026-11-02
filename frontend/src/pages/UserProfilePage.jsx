@@ -278,7 +278,12 @@ export default function UserProfilePage() {
                             )}
                             <span className="flex items-center gap-1.5">
                               <Ticket size={13} className="text-brand-purple" />
-                              {b.quantity} seat{b.quantity > 1 ? 's' : ''}
+                              <span>{b.quantity} seat{b.quantity > 1 ? 's' : ''}</span>
+                              {b.seat_numbers && (
+                                <span className="px-1.5 py-0.5 rounded bg-brand-purple/20 border border-brand-purple/40 text-[10px] font-mono text-brand-lavender font-bold">
+                                  {b.seat_numbers}
+                                </span>
+                              )}
                             </span>
                             <span className="text-white font-semibold">
                               ₹{Number(b.total_amount).toLocaleString('en-IN')}

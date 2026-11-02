@@ -2,155 +2,255 @@
 import pool from '../config/db.js';
 import { getIo } from './socket.js';
 
-// In-memory store: eventId -> array of { lockId, socketId, quantity, expiresAt, timer }
-const activeHolds = new Map();
+// In-memory store: eventId (number) -> Map: seatNumber (string) -> { socketId, expiresAt, timer, lockId }
+const seatLocks = new Map();
 
 /**
- * Get total quantity of currently locked seats for an event
+ * Get all active locks for an event
  */
-export function getHeldSeatsForEvent(eventId) {
-  const holds = activeHolds.get(Number(eventId)) || [];
-  return holds.reduce((sum, h) => sum + h.quantity, 0);
+export function getLockedSeatsForEvent(eventId) {
+  const evId = Number(eventId);
+  const locks = seatLocks.get(evId);
+  if (!locks || locks.size === 0) return [];
+
+  const now = Date.now();
+  const result = [];
+  for (const [seatNumber, lock] of locks.entries()) {
+    if (lock.expiresAt > now) {
+      result.push({
+        seatNumber,
+        socketId: lock.socketId,
+        lockId: lock.lockId,
+        expiresAt: lock.expiresAt,
+      });
+    }
+  }
+  return result;
 }
 
 /**
- * Attempt to hold seats temporarily (e.g. 5 minutes)
+ * Get count of held seats for an event (backwards compatibility)
  */
-export async function holdSeats({ eventId, quantity, socketId, durationMs = 5 * 60 * 1000 }) {
+export function getHeldSeatsForEvent(eventId) {
+  return getLockedSeatsForEvent(eventId).length;
+}
+
+/**
+ * Lock specific seats for a socket for a given duration (default 5 min)
+ */
+export async function lockSeats({ eventId, seatNumbers, socketId, durationMs = 5 * 60 * 1000 }) {
   const evId = Number(eventId);
-  const qty = Number(quantity);
+  if (!evId || !Array.isArray(seatNumbers) || seatNumbers.length === 0) {
+    return { success: false, message: 'Invalid lock parameters' };
+  }
 
-  if (!evId || qty <= 0) return { success: false, message: 'Invalid hold parameters' };
+  if (!seatLocks.has(evId)) {
+    seatLocks.set(evId, new Map());
+  }
+  const evLocks = seatLocks.get(evId);
+  const now = Date.now();
 
-  // Fetch current available seats from database
-  const [rows] = await pool.execute('SELECT available_seats FROM events WHERE id = ?', [evId]);
-  if (rows.length === 0) return { success: false, message: 'Event not found' };
+  // 1. Verify in database whether any of the seats are already booked
+  const placeholders = seatNumbers.map(() => '?').join(',');
+  const [dbRows] = await pool.execute(
+    `SELECT seat_number, status FROM event_seats WHERE event_id = ? AND seat_number IN (${placeholders})`,
+    [evId, ...seatNumbers]
+  );
 
-  const dbAvailable = Number(rows[0].available_seats);
-  const alreadyHeld = getHeldSeatsForEvent(evId);
-  const effectiveAvailable = dbAvailable - alreadyHeld;
+  const dbStatusMap = {};
+  for (const row of dbRows) {
+    dbStatusMap[row.seat_number] = row.status;
+  }
 
-  if (qty > effectiveAvailable) {
+  // Check conflicts
+  const blocked = [];
+  for (const sn of seatNumbers) {
+    if (dbStatusMap[sn] === 'booked') {
+      blocked.push(sn);
+      continue;
+    }
+    const existing = evLocks.get(sn);
+    if (existing && existing.expiresAt > now && existing.socketId !== socketId) {
+      blocked.push(sn);
+    }
+  }
+
+  if (blocked.length > 0) {
     return {
       success: false,
-      message: 'Not enough seats available to hold',
-      effectiveAvailable: Math.max(0, effectiveAvailable),
+      message: 'Some seats are unavailable or held by another user',
+      blocked,
     };
   }
 
-  const lockId = `lock_${evId}_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-  const expiresAt = Date.now() + durationMs;
+  // 2. Apply locks
+  const lockedNow = [];
+  for (const sn of seatNumbers) {
+    const existing = evLocks.get(sn);
+    if (existing && existing.timer) {
+      clearTimeout(existing.timer);
+    }
 
-  const timer = setTimeout(() => {
-    releaseSeatHold(lockId, 'expired');
-  }, durationMs);
+    const lockId = `lock_${evId}_${sn}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const expiresAt = now + durationMs;
+    const timer = setTimeout(() => {
+      releaseSeatsByLockId(evId, sn, lockId);
+    }, durationMs);
 
-  const lockRecord = {
-    lockId,
-    eventId: evId,
-    socketId,
-    quantity: qty,
-    expiresAt,
-    timer,
-  };
+    evLocks.set(sn, { socketId, expiresAt, timer, lockId });
+    lockedNow.push(sn);
+  }
 
-  const list = activeHolds.get(evId) || [];
-  list.push(lockRecord);
-  activeHolds.set(evId, list);
-
-  // Broadcast effective seat update to room
-  broadcastSeatUpdate(evId, dbAvailable - getHeldSeatsForEvent(evId), qty);
+  broadcastSeatLockUpdate(evId);
 
   return {
     success: true,
-    lockId,
-    eventId: evId,
-    quantity: qty,
-    expiresAt,
-    effectiveAvailable: dbAvailable - getHeldSeatsForEvent(evId),
+    lockedSeats: lockedNow,
+    expiresAt: now + durationMs,
   };
 }
 
 /**
- * Release a specific hold by lockId
+ * Release specific seats held by a socket
  */
-export async function releaseSeatHold(lockId, reason = 'released') {
-  for (const [evId, list] of activeHolds.entries()) {
-    const idx = list.findIndex(h => h.lockId === lockId);
-    if (idx !== -1) {
-      const [removed] = list.splice(idx, 1);
-      if (removed.timer) clearTimeout(removed.timer);
+export async function releaseSeats({ eventId, seatNumbers, socketId }) {
+  const evId = Number(eventId);
+  if (!evId || !Array.isArray(seatNumbers) || seatNumbers.length === 0) {
+    return { success: true };
+  }
 
-      if (list.length === 0) {
-        activeHolds.delete(evId);
-      } else {
-        activeHolds.set(evId, list);
+  const evLocks = seatLocks.get(evId);
+  if (!evLocks) return { success: true };
+
+  let changed = false;
+  for (const sn of seatNumbers) {
+    const lock = evLocks.get(sn);
+    if (lock && (!socketId || lock.socketId === socketId)) {
+      if (lock.timer) clearTimeout(lock.timer);
+      evLocks.delete(sn);
+      changed = true;
+    }
+  }
+
+  if (evLocks.size === 0) {
+    seatLocks.delete(evId);
+  }
+
+  if (changed) {
+    broadcastSeatLockUpdate(evId);
+  }
+
+  return { success: true };
+}
+
+/**
+ * Release all locks held by a disconnected socket
+ */
+export async function releaseAllSeatsForSocket(socketId) {
+  if (!socketId) return;
+
+  for (const [evId, evLocks] of seatLocks.entries()) {
+    const toDelete = [];
+    for (const [sn, lock] of evLocks.entries()) {
+      if (lock.socketId === socketId) {
+        if (lock.timer) clearTimeout(lock.timer);
+        toDelete.push(sn);
       }
+    }
 
-      // Query current DB seats and broadcast restored effective count
-      try {
-        const [rows] = await pool.execute('SELECT available_seats FROM events WHERE id = ?', [evId]);
-        if (rows.length > 0) {
-          const dbAvailable = Number(rows[0].available_seats);
-          const currentHeld = getHeldSeatsForEvent(evId);
-          broadcastSeatUpdate(evId, dbAvailable - currentHeld);
-        }
-      } catch (e) {
-        console.error('Error broadcasting after hold release:', e);
+    for (const sn of toDelete) {
+      evLocks.delete(sn);
+    }
+
+    if (evLocks.size === 0) {
+      seatLocks.delete(evId);
+    }
+
+    if (toDelete.length > 0) {
+      broadcastSeatLockUpdate(evId);
+    }
+  }
+}
+
+/**
+ * Confirm release of locked seats (e.g. after booking confirmation)
+ */
+export function confirmRelease(eventId, seatNumbers) {
+  const evId = Number(eventId);
+  const evLocks = seatLocks.get(evId);
+  if (!evLocks || !Array.isArray(seatNumbers)) return;
+
+  let changed = false;
+  for (const sn of seatNumbers) {
+    const lock = evLocks.get(sn);
+    if (lock) {
+      if (lock.timer) clearTimeout(lock.timer);
+      evLocks.delete(sn);
+      changed = true;
+    }
+  }
+
+  if (evLocks.size === 0) {
+    seatLocks.delete(evId);
+  }
+
+  if (changed) {
+    broadcastSeatLockUpdate(evId);
+  }
+}
+
+/**
+ * Internal lock expiration callback
+ */
+function releaseSeatsByLockId(evId, seatNumber, lockId) {
+  const evLocks = seatLocks.get(evId);
+  if (!evLocks) return;
+
+  const lock = evLocks.get(seatNumber);
+  if (lock && lock.lockId === lockId) {
+    evLocks.delete(seatNumber);
+    if (evLocks.size === 0) {
+      seatLocks.delete(evId);
+    }
+    broadcastSeatLockUpdate(evId);
+  }
+}
+
+/**
+ * Broadcast active seat locks to event room
+ */
+export function broadcastSeatLockUpdate(eventId) {
+  try {
+    const io = getIo();
+    if (!io) return;
+    const locked = getLockedSeatsForEvent(eventId);
+    io.to(`event_${eventId}`).emit('seatLockUpdate', {
+      eventId: Number(eventId),
+      lockedSeats: locked.map(l => ({
+        seatNumber: l.seatNumber,
+        socketId: l.socketId,
+        expiresAt: l.expiresAt,
+      })),
+    });
+  } catch (err) {
+    console.error('Error broadcasting seatLockUpdate:', err);
+  }
+}
+
+// Backwards compatibility aliases
+export { lockSeats as holdSeats };
+export { releaseAllSeatsForSocket as releaseHoldsForSocket };
+export async function releaseSeatHold(lockId) {
+  for (const [evId, evLocks] of seatLocks.entries()) {
+    for (const [sn, lock] of evLocks.entries()) {
+      if (lock.lockId === lockId) {
+        if (lock.timer) clearTimeout(lock.timer);
+        evLocks.delete(sn);
+        if (evLocks.size === 0) seatLocks.delete(evId);
+        broadcastSeatLockUpdate(evId);
+        return true;
       }
-
-      return true;
     }
   }
   return false;
 }
-
-/**
- * Release all holds belonging to a disconnected socket
- */
-export async function releaseHoldsForSocket(socketId) {
-  if (!socketId) return;
-  for (const [evId, list] of activeHolds.entries()) {
-    const toRemove = list.filter(h => h.socketId === socketId);
-    if (toRemove.length > 0) {
-      for (const h of toRemove) {
-        if (h.timer) clearTimeout(h.timer);
-      }
-      const remaining = list.filter(h => h.socketId !== socketId);
-      if (remaining.length === 0) {
-        activeHolds.delete(evId);
-      } else {
-        activeHolds.set(evId, remaining);
-      }
-
-      try {
-        const [rows] = await pool.execute('SELECT available_seats FROM events WHERE id = ?', [evId]);
-        if (rows.length > 0) {
-          const dbAvailable = Number(rows[0].available_seats);
-          broadcastSeatUpdate(evId, dbAvailable - getHeldSeatsForEvent(evId));
-        }
-      } catch (e) {
-        console.error('Error broadcasting after socket disconnect release:', e);
-      }
-    }
-  }
-}
-
-function broadcastSeatUpdate(eventId, availableSeats, heldQuantity = 0) {
-  const io = getIo();
-  if (io) {
-    io.to(`event_${eventId}`).emit('seatUpdate', {
-      eventId,
-      availableSeats: Math.max(0, availableSeats),
-      isTemporaryHold: true,
-    });
-    if (heldQuantity > 0) {
-      io.to(`event_${eventId}`).emit('seatsHeld', {
-        eventId,
-        heldQuantity,
-        availableSeats: Math.max(0, availableSeats),
-      });
-    }
-  }
-}
-

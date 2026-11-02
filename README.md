@@ -356,6 +356,7 @@ Evently is architected for seamless cloud deployment with **Vercel** (Frontend),
 |--------|----------|-------------|---------------|
 | `GET` | `/api/events` | List all events (supports `?category=`) | Public |
 | `GET` | `/api/events/:id` | Get event details by ID | Public |
+| `GET` | `/api/events/:id/seats` | Get interactive seat layout & live lock status | Public |
 | `GET` | `/api/events/:id/related` | Get related events in category | Public |
 | `POST` | `/api/events` | Create new event with category | Admin JWT |
 | `PUT` | `/api/events/:id` | Update event details & capacity | Admin JWT |
@@ -392,7 +393,47 @@ A comprehensive automated test suite (`backend/scripts/comprehensive_test.mjs`) 
 
 ### Run Tests:
 ```bash
+# 1. Full 65-point comprehensive integration verification
 node --env-file=backend/.env backend/scripts/comprehensive_test.mjs
+
+# 2. Interactive seat selection, real-time locking & concurrency test
+node --env-file=backend/.env backend/scripts/testSeatLocking.mjs
 ```
-**Test Results**: `65 passed, 0 failed` (100% automated coverage).
+**Test Results**: `65 passed, 0 failed` on comprehensive test suite; `22 passed, 0 failed` on real-time seat locking suite.
+
+---
+
+## 🪑 Two-Browser Seat Locking Verification Guide
+
+To manually verify real-time seat locking with two browser sessions:
+
+1. **Start backend and frontend**:
+   ```bash
+   cd backend && npm run dev
+   # In another terminal:
+   cd frontend && npm run dev
+   ```
+2. **Open Session 1**:
+   - Open Chrome (or your regular browser) at `http://localhost:5173/events/1`.
+   - Log in as Customer 1.
+3. **Open Session 2**:
+   - Open Incognito window (or a different browser such as Edge/Firefox) at `http://localhost:5173/events/1`.
+   - Log in as Customer 2 (or browse as guest).
+4. **Test Real-Time Locking**:
+   - In Browser 1, click seat **A1** (or any available seat).
+   - Seat **A1** turns purple (selected) in Browser 1.
+   - **Immediately without refreshing**, Browser 2 updates and displays **A1** in amber with a lock icon (temporarily locked for 5 minutes).
+   - In Browser 2, try clicking **A1**: the button is disabled and cannot be selected.
+5. **Test Deselection Release**:
+   - In Browser 1, click **A1** again to deselect it.
+   - Browser 2 immediately sees **A1** become available (white/clickable) in real-time.
+6. **Test Disconnect Auto-Release**:
+   - In Browser 1, select seat **A2**.
+   - Close Browser 1 tab or navigate away.
+   - Within milliseconds, the socket disconnects and Browser 2 sees **A2** unlock back to available.
+7. **Test Confirmed Booking & Ticket**:
+   - In Browser 1, select seats **A3** and **A4**, click "Book 2 Seats", and complete checkout.
+   - Browser 2 immediately receives a `seatsBooked` update and shows **A3** and **A4** as permanently booked (red `X`).
+   - Browser 1 reaches the confirmation page displaying digital ticket with allocated seat numbers `A3, A4`.
+   - Download the high-res PNG ticket: verify `A3, A4` is printed under `TIER & SEATS`.
 

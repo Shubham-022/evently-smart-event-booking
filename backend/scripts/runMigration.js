@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import pool from '../config/db.js';
+import { migrateSeats } from './migrateSeats.js';
 
 async function migrate() {
   console.log('Running database migrations...');
@@ -90,6 +91,9 @@ async function migrate() {
       UPDATE events SET category = 'Sports' WHERE title LIKE '%Marathon%' OR title LIKE '%Sports%' OR title LIKE '%Fitness%';
     `);
     console.log('✅ Event categories populated.');
+
+    // Run seats migration
+    await migrateSeats();
 
     console.log('Migration completed successfully.');
   } catch (err) {

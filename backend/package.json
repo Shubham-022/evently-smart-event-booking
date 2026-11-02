@@ -9,7 +9,9 @@
     "migrate": "node scripts/runMigration.js",
     "seed:admin": "node scripts/seedAdmin.js",
     "seed:events": "node scripts/seedEvents.js",
-    "test:integration": "node scripts/comprehensive_test.mjs"
+    "seed:seats": "node scripts/migrateSeats.js",
+    "test:integration": "node scripts/comprehensive_test.mjs",
+    "test:seats": "node scripts/testSeatLocking.mjs"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

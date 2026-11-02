@@ -33,7 +33,8 @@ export default function BookingPage() {
   const location = useLocation();
   const { user, isUserAuthenticated } = useAuth();
 
-  const passedQuantity = location.state?.quantity ?? 1;
+  const passedSeats = location.state?.selectedSeats ?? null;
+  const passedQuantity = passedSeats && passedSeats.length > 0 ? passedSeats.length : (location.state?.quantity ?? 1);
   const passedCategory = location.state?.ticket_category ?? 'General';
 
   const [event, setEvent] = useState(null);
@@ -103,7 +104,7 @@ export default function BookingPage() {
 
     if (!isUserAuthenticated) {
       navigate(`/login?redirect=/booking/${id}`, {
-        state: { quantity: passedQuantity, ticket_category: passedCategory },
+        state: { selectedSeats: passedSeats, quantity: passedQuantity, ticket_category: passedCategory },
       });
       return;
     }
@@ -120,6 +121,7 @@ export default function BookingPage() {
         mobile: form.mobile.trim(),
         quantity: Number(passedQuantity),
         ticket_category: passedCategory,
+        seat_ids: passedSeats && passedSeats.length > 0 ? passedSeats : undefined,
       });
 
       navigate(`/booking/success/${data.id}`, { state: { booking: data } });
@@ -127,7 +129,7 @@ export default function BookingPage() {
       if (err.response) {
         const { status, data: d } = err.response;
         if (status === 409) {
-          setApiError(`Not enough seats. ${d.availableSeats != null ? `Only ${d.availableSeats} seat(s) left.` : ''}`);
+          setApiError(d.error || `Not enough seats. ${d.availableSeats != null ? `Only ${d.availableSeats} seat(s) left.` : ''}`);
         } else if (status === 404) {
           setApiError('Event not found.');
         } else if (status === 401) {
@@ -259,9 +261,20 @@ export default function BookingPage() {
 
                   {/* Financial breakdown */}
                   <div className="border-t border-brand-border pt-4 space-y-2 text-xs text-gray-400">
-                    <div className="flex justify-between">
+                    <div className="flex justify-between items-start">
                       <span>Seats Reserved</span>
-                      <span className="text-white font-medium">{passedQuantity} ticket{passedQuantity > 1 ? 's' : ''}</span>
+                      <div className="text-right">
+                        <span className="text-white font-medium">{passedQuantity} ticket{passedQuantity > 1 ? 's' : ''}</span>
+                        {passedSeats && passedSeats.length > 0 && (
+                          <div className="flex flex-wrap justify-end gap-1 mt-1 max-w-[200px]">
+                            {passedSeats.map(sn => (
+                              <span key={sn} className="px-1.5 py-0.5 rounded bg-brand-purple/20 border border-brand-purple/40 text-[10px] font-mono font-bold text-brand-lavender">
+                                {sn}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div className="flex justify-between">
                       <span>Tier Unit Price</span>

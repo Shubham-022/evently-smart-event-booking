@@ -7,6 +7,8 @@ import {
   updateEventService,
   deleteEventService,
 } from '../services/eventsService.js';
+import pool from '../config/db.js';
+import { getLockedSeatsForEvent } from '../utils/seatLock.js';
 
 /**
  * Validate request payload for creating an event.
@@ -250,6 +252,50 @@ export async function deleteEvent(req, res) {
     return res.status(200).json({ message: 'Event deleted successfully' });
   } catch (err) {
     console.error('Error deleting event:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+// GET /api/events/:id/seats
+export async function getSeatMap(req, res) {
+  const eventId = Number(req.params.id);
+  if (!Number.isInteger(eventId) || eventId <= 0) {
+    return res.status(400).json({ errors: ['Invalid event ID'] });
+  }
+
+  try {
+    const [seats] = await pool.execute(
+      `SELECT id, seat_number, row_label, seat_index, ticket_category, status
+       FROM event_seats
+       WHERE event_id = ?
+       ORDER BY row_label ASC, seat_index ASC`,
+      [eventId]
+    );
+
+    const lockedSeats = getLockedSeatsForEvent(eventId);
+    const lockedMap = new Map();
+    for (const l of lockedSeats) {
+      lockedMap.set(l.seatNumber, l.socketId);
+    }
+
+    const seatData = seats.map((s) => ({
+      id: s.id,
+      seatNumber: s.seat_number,
+      rowLabel: s.row_label,
+      seatIndex: s.seat_index,
+      ticketCategory: s.ticket_category,
+      status: s.status === 'booked' ? 'booked' : lockedMap.has(s.seat_number) ? 'locked' : 'available',
+      lockedBySocketId: lockedMap.get(s.seat_number) || null,
+    }));
+
+    return res.json({
+      eventId,
+      totalSeats: seats.length,
+      seats: seatData,
+      lockedSeats,
+    });
+  } catch (err) {
+    console.error('Error fetching seat map:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 }

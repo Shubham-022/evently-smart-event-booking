@@ -1,6 +1,7 @@
 // backend/services/bookingsService.js
 import pool from '../config/db.js';
 import { getIo } from '../utils/socket.js';
+import { confirmRelease, broadcastSeatLockUpdate } from '../utils/seatLock.js';
 
 export const TICKET_TIERS = {
   General: { multiplier: 1.0, label: 'General' },
@@ -31,6 +32,7 @@ export async function createBookingService({
   mobile,
   quantity,
   ticket_category = 'General',
+  seat_ids = null,
 }) {
   const connection = await pool.getConnection();
   try {
@@ -50,7 +52,13 @@ export async function createBookingService({
     const event = eventRows[0];
     const availableSeats = Number(event.available_seats);
     const basePrice = Number(event.price);
-    const qty = Number(quantity);
+
+    // Normalize seat identifiers if provided
+    const seatList = Array.isArray(seat_ids) && seat_ids.length > 0
+      ? seat_ids.map(s => String(s).trim()).filter(Boolean)
+      : null;
+
+    const qty = seatList ? seatList.length : Number(quantity);
 
     if (qty > availableSeats) {
       await connection.rollback();
@@ -62,12 +70,65 @@ export async function createBookingService({
     const unitPrice = Math.round(basePrice * tier.multiplier);
     const totalAmount = qty * unitPrice;
 
-    // Insert the booking record with user_id & ticket_category
+    // Check and lock exact seats if provided
+    let lockedSeatRows = [];
+    if (seatList) {
+      const placeholders = seatList.map(() => '?').join(',');
+      const [seatRows] = await connection.execute(
+        `SELECT id, seat_number, status, ticket_category
+         FROM event_seats
+         WHERE event_id = ? AND seat_number IN (${placeholders})
+         FOR UPDATE`,
+        [event_id, ...seatList]
+      );
+
+      if (seatRows.length !== seatList.length) {
+        await connection.rollback();
+        return {
+          seatError: true,
+          message: 'One or more selected seats do not exist in the venue layout',
+        };
+      }
+
+      const alreadyBooked = seatRows.filter(s => s.status === 'booked').map(s => s.seat_number);
+      if (alreadyBooked.length > 0) {
+        await connection.rollback();
+        return {
+          seatError: true,
+          message: `Seat(s) ${alreadyBooked.join(', ')} have already been booked by another user`,
+          seats: alreadyBooked,
+        };
+      }
+
+      lockedSeatRows = seatRows;
+    }
+
+    // Insert the booking record with user_id, ticket_category & seat_numbers
+    const seatNumbersStr = seatList ? seatList.join(',') : null;
     const [insertResult] = await connection.execute(
-      `INSERT INTO bookings (user_id, event_id, name, email, mobile, quantity, ticket_category, total_amount, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [user_id, event_id, name, email, mobile, qty, tier.label, totalAmount, 'confirmed']
+      `INSERT INTO bookings (user_id, event_id, name, email, mobile, quantity, ticket_category, seat_numbers, total_amount, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [user_id, event_id, name, email, mobile, qty, tier.label, seatNumbersStr, totalAmount, 'confirmed']
     );
+
+    const bookingId = insertResult.insertId;
+
+    // Link allocated seats in event_seats and booking_seats
+    if (seatList && lockedSeatRows.length > 0) {
+      const seatIds = lockedSeatRows.map(s => s.id);
+      const idPlaceholders = seatIds.map(() => '?').join(',');
+
+      await connection.execute(
+        `UPDATE event_seats SET status = 'booked', booking_id = ? WHERE id IN (${idPlaceholders})`,
+        [bookingId, ...seatIds]
+      );
+
+      const junctionValues = lockedSeatRows.map(s => [bookingId, s.id, s.seat_number]);
+      await connection.query(
+        'INSERT INTO booking_seats (booking_id, seat_id, seat_number) VALUES ?',
+        [junctionValues]
+      );
+    }
 
     // Decrease the available seats on the event
     await connection.execute(
@@ -81,12 +142,17 @@ export async function createBookingService({
        FROM bookings b
        JOIN events e ON b.event_id = e.id
        WHERE b.id = ?`,
-      [insertResult.insertId]
+      [bookingId]
     );
 
     await connection.commit();
 
-    // Emit real-time seat update via Socket.IO
+    // Release any temporary in-memory hold on confirmed seats
+    if (seatList) {
+      confirmRelease(event_id, seatList);
+    }
+
+    // Emit real-time updates via Socket.IO
     try {
       const io = getIo();
       if (io) {
@@ -95,6 +161,13 @@ export async function createBookingService({
           eventId: event_id,
           availableSeats: remainingSeats,
         });
+        if (seatList) {
+          io.to(`event_${event_id}`).emit('seatsBooked', {
+            eventId: event_id,
+            bookedSeats: seatList,
+          });
+          broadcastSeatLockUpdate(event_id);
+        }
       }
     } catch (emitErr) {
       console.error('Socket emit error after booking creation:', emitErr);
@@ -191,7 +264,7 @@ export async function cancelBookingService(bookingId) {
 
     // Lock the booking row
     const [bookingRows] = await connection.execute(
-      'SELECT id, user_id, status, quantity, event_id FROM bookings WHERE id = ? FOR UPDATE',
+      'SELECT id, user_id, status, quantity, event_id, seat_numbers FROM bookings WHERE id = ? FOR UPDATE',
       [bookingId]
     );
     if (bookingRows.length === 0) {
@@ -224,7 +297,13 @@ export async function cancelBookingService(bookingId) {
       ['cancelled', bookingId]
     );
 
-    // Restore seats
+    // Free allocated seats in event_seats
+    await connection.execute(
+      "UPDATE event_seats SET status = 'available', booking_id = NULL WHERE booking_id = ?",
+      [bookingId]
+    );
+
+    // Restore seats count
     await connection.execute(
       'UPDATE events SET available_seats = ? WHERE id = ?',
       [restoredSeats, booking.event_id]
@@ -232,7 +311,7 @@ export async function cancelBookingService(bookingId) {
 
     await connection.commit();
 
-    // Emit real-time seat update via Socket.IO
+    // Emit real-time updates via Socket.IO
     try {
       const io = getIo();
       if (io) {
@@ -240,6 +319,7 @@ export async function cancelBookingService(bookingId) {
           eventId: booking.event_id,
           availableSeats: restoredSeats,
         });
+        broadcastSeatLockUpdate(booking.event_id);
       }
     } catch (emitErr) {
       console.error('Socket emit error after booking cancel:', emitErr);

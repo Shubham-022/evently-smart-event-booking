@@ -226,6 +226,22 @@ export default function BookingSuccessPage() {
                           {booking.ticket_category || 'General'}
                         </span>
                       </p>
+                      {booking.seat_numbers && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {booking.seat_numbers
+                            .split(',')
+                            .map((s) => s.trim())
+                            .filter(Boolean)
+                            .map((sn) => (
+                              <span
+                                key={sn}
+                                className="px-2 py-0.5 rounded bg-brand-purple/20 border border-brand-purple/40 text-[11px] font-mono font-bold text-brand-lavender"
+                              >
+                                {sn}
+                              </span>
+                            ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 

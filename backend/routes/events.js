@@ -5,6 +5,7 @@ import {
   getAllEvents,
   getEventById,
   getRelatedEvents,
+  getSeatMap,
   updateEvent,
   deleteEvent,
 } from '../controllers/eventsController.js';
@@ -20,6 +21,9 @@ router.get('/', getAllEvents);
 
 // GET /api/events/:id
 router.get('/:id', getEventById);
+
+// GET /api/events/:id/seats
+router.get('/:id/seats', getSeatMap);
 
 // GET /api/events/:id/related
 router.get('/:id/related', getRelatedEvents);

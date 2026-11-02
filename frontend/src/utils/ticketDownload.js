@@ -110,7 +110,13 @@ export async function downloadTicketAsImage(booking, qrSvgElement) {
         },
         {
           label: 'TIER & SEATS',
-          value: `${(booking.ticket_category || 'General').toUpperCase()} • ${booking.quantity} Ticket${booking.quantity > 1 ? 's' : ''}`,
+          value: booking.seat_numbers
+            ? `${(booking.ticket_category || 'General').toUpperCase()} • ${
+                booking.seat_numbers.length > 22
+                  ? booking.seat_numbers.slice(0, 20) + '…'
+                  : booking.seat_numbers
+              }`
+            : `${(booking.ticket_category || 'General').toUpperCase()} • ${booking.quantity} Ticket${booking.quantity > 1 ? 's' : ''}`,
         },
         {
           label: 'STATUS',

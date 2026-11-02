@@ -1,17 +1,18 @@
 // src/pages/EventDetailsPage.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Calendar, MapPin, Users, Ticket, Tag, Clock,
   ChevronLeft, Plus, Minus, ExternalLink, AlertCircle,
-  Crown, Star, ShieldCheck, Sparkles, ArrowRight
+  Crown, Star, ShieldCheck, Sparkles, ArrowRight, Lock, Check, Info
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import EventCard from '../components/EventCard';
+import SeatMap from '../components/SeatMap';
 import { useAuth } from '../contexts/AuthContext';
-import { getEventById, getRelatedEvents } from '../services/eventsService';
+import { getEventById, getEventSeats, getRelatedEvents } from '../services/eventsService';
 import { socket } from '../services/socket';
 
 const TICKET_CATEGORIES = [
@@ -74,11 +75,17 @@ export default function EventDetailsPage() {
   const [error, setError] = useState(null);
 
   const [selectedTier, setSelectedTier] = useState('General');
-  const [quantity, setQuantity] = useState(1);
   const [availableSeats, setAvailableSeats] = useState(null);
   const [holdNotice, setHoldNotice] = useState(null);
 
-  // Fetch event details & related events
+  // Interactive seat state
+  const [seatsData, setSeatsData] = useState([]);
+  const [selectedSeats, setSelectedSeats] = useState([]);
+  const [lockedByOthers, setLockedByOthers] = useState([]);
+  const [seatLoading, setSeatLoading] = useState(true);
+  const hasBookedRef = useRef(false);
+
+  // Fetch event details & related events & seat layout
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -107,10 +114,30 @@ export default function EventDetailsPage() {
         }
       }
     })();
+
+    // Fetch seats
+    (async () => {
+      try {
+        const { data } = await getEventSeats(id);
+        if (!cancelled) {
+          setSeatsData(data.seats || []);
+          if (Array.isArray(data.lockedSeats)) {
+            setLockedByOthers(data.lockedSeats.filter(l => l.socketId !== socket.id));
+          }
+          setSeatLoading(false);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          console.error('Failed to load seat layout:', e);
+          setSeatLoading(false);
+        }
+      }
+    })();
+
     return () => { cancelled = true; };
   }, [id]);
 
-  // Socket.IO: Real-time seat updates
+  // Socket.IO: Real-time seat updates & seat locks
   useEffect(() => {
     if (!id) return;
     if (!socket.connected) socket.connect();
@@ -122,31 +149,118 @@ export default function EventDetailsPage() {
       if (Number(payload.eventId) === eventIdNum) {
         const updatedSeats = Number(payload.availableSeats);
         setAvailableSeats(updatedSeats);
-        setQuantity(q => Math.min(q, Math.max(1, updatedSeats)));
+      }
+    };
+
+    const handleSeatLockUpdate = (payload) => {
+      if (Number(payload.eventId) === eventIdNum) {
+        const lockedList = payload.lockedSeats || [];
+        // Only consider locks held by other sockets
+        setLockedByOthers(lockedList.filter(l => l.socketId !== socket.id));
+      }
+    };
+
+    const handleSeatsBooked = (payload) => {
+      if (Number(payload.eventId) === eventIdNum && Array.isArray(payload.bookedSeats)) {
+        const booked = new Set(payload.bookedSeats);
+        // Remove from our selection if another user just booked it
+        setSelectedSeats(prev => prev.filter(s => !booked.has(s)));
+        // Mark as booked in our local seat map
+        setSeatsData(prev =>
+          prev.map(s => (booked.has(s.seatNumber) ? { ...s, status: 'booked' } : s))
+        );
       }
     };
 
     socket.on('seatUpdate', handleSeatUpdate);
+    socket.on('seatLockUpdate', handleSeatLockUpdate);
+    socket.on('seatsBooked', handleSeatsBooked);
 
     return () => {
+      // If user unmounts without proceeding to checkout, release holds
+      if (!hasBookedRef.current && selectedSeats.length > 0) {
+        socket.emit('releaseSeat', {
+          eventId: eventIdNum,
+          seatNumbers: selectedSeats,
+        });
+      }
       socket.emit('leaveEvent', eventIdNum);
       socket.off('seatUpdate', handleSeatUpdate);
+      socket.off('seatLockUpdate', handleSeatLockUpdate);
+      socket.off('seatsBooked', handleSeatsBooked);
     };
-  }, [id]);
+  }, [id, selectedSeats]);
+
+  const handleToggleSeat = (seat) => {
+    const seatNum = seat.seatNumber;
+    const isAlreadySelected = selectedSeats.includes(seatNum);
+
+    if (isAlreadySelected) {
+      // Release lock on this seat
+      socket.emit('releaseSeat', {
+        eventId: Number(id),
+        seatNumbers: [seatNum],
+      });
+      setSelectedSeats(prev => prev.filter(s => s !== seatNum));
+      setHoldNotice(null);
+    } else {
+      if (selectedSeats.length >= 10) {
+        setHoldNotice('Maximum 10 seats allowed per booking.');
+        setTimeout(() => setHoldNotice(null), 3000);
+        return;
+      }
+
+      // Temporarily lock this seat for 5 minutes
+      socket.emit(
+        'lockSeat',
+        {
+          eventId: Number(id),
+          seatNumbers: [seatNum],
+          durationMs: 5 * 60 * 1000,
+        },
+        (res) => {
+          if (res?.success) {
+            setSelectedSeats(prev => [...prev, seatNum]);
+            // If seat category matches a known tier, sync tier for accurate pricing
+            if (seat.ticketCategory && TICKET_CATEGORIES.some(c => c.id === seat.ticketCategory)) {
+              setSelectedTier(seat.ticketCategory);
+            }
+            setHoldNotice(null);
+          } else {
+            setHoldNotice(res?.message || 'Seat is currently held by another user.');
+            setTimeout(() => setHoldNotice(null), 3500);
+          }
+        }
+      );
+    }
+  };
 
   const handleBook = () => {
-    const seats = availableSeats ?? (event?.available_seats ?? 0);
-    if (seats < quantity) return;
+    if (selectedSeats.length === 0) {
+      setHoldNotice('Please select at least one seat on the layout.');
+      setTimeout(() => setHoldNotice(null), 3000);
+      return;
+    }
+
+    hasBookedRef.current = true;
 
     if (!isUserAuthenticated) {
       navigate(`/login?redirect=/booking/${id}`, {
-        state: { quantity, ticket_category: selectedTier },
+        state: {
+          selectedSeats,
+          quantity: selectedSeats.length,
+          ticket_category: selectedTier,
+        },
       });
       return;
     }
 
     navigate(`/booking/${id}`, {
-      state: { quantity, ticket_category: selectedTier },
+      state: {
+        selectedSeats,
+        quantity: selectedSeats.length,
+        ticket_category: selectedTier,
+      },
     });
   };
 
@@ -172,7 +286,8 @@ export default function EventDetailsPage() {
   // Dynamic price calculation
   const currentCategory = TICKET_CATEGORIES.find(c => c.id === selectedTier) || TICKET_CATEGORIES[0];
   const unitPrice = Math.round(basePrice * currentCategory.multiplier);
-  const totalAmount = unitPrice * quantity;
+  const selectedCount = selectedSeats.length;
+  const totalAmount = unitPrice * (selectedCount > 0 ? selectedCount : 1);
 
   const coverImage = event.img || `https://picsum.photos/seed/${event.id}/1200/500`;
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`;
@@ -307,6 +422,47 @@ export default function EventDetailsPage() {
                 </div>
               </div>
 
+              {/* ─── Interactive Seat Selection Layout ─── */}
+              {!isSoldOut && (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="font-display font-bold text-xl flex items-center gap-2">
+                      <Ticket size={18} className="text-brand-purple" /> Select Your Seats
+                    </h2>
+                    <span className="text-xs text-brand-lavender font-semibold">
+                      {selectedCount > 0
+                        ? `${selectedCount} seat${selectedCount > 1 ? 's' : ''} selected (max 10)`
+                        : 'Click available seats to reserve'}
+                    </span>
+                  </div>
+
+                  <div className="glass rounded-2xl p-6 border border-brand-border shadow-xl">
+                    {holdNotice && (
+                      <div className="mb-4 p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2">
+                        <Info size={14} className="flex-shrink-0" />
+                        <span>{holdNotice}</span>
+                      </div>
+                    )}
+
+                    {seatLoading ? (
+                      <div className="py-12 flex flex-col items-center justify-center gap-3">
+                        <div className="w-8 h-8 border-2 border-brand-purple border-t-transparent rounded-full animate-spin" />
+                        <p className="text-sm text-gray-400">Loading interactive seat layout…</p>
+                      </div>
+                    ) : (
+                      <SeatMap
+                        seats={seatsData}
+                        selectedSeats={selectedSeats}
+                        lockedByOthers={lockedByOthers}
+                        onToggleSeat={handleToggleSeat}
+                        selectedTier={selectedTier}
+                        maxSelectable={10}
+                      />
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Google Maps Venue Card */}
               <div>
                 <h2 className="font-display font-bold text-xl mb-3 flex items-center gap-2">
@@ -355,7 +511,7 @@ export default function EventDetailsPage() {
                   <span className="text-xs text-brand-purple uppercase font-bold tracking-wider">{currentCategory.name}</span>
                   <p className="text-3xl font-display font-black text-white mt-0.5">
                     ₹{unitPrice.toLocaleString('en-IN')}
-                    <span className="text-sm font-normal text-gray-500 ml-1">/ ticket</span>
+                    <span className="text-sm font-normal text-gray-500 ml-1">/ seat</span>
                   </p>
                 </div>
 
@@ -373,32 +529,48 @@ export default function EventDetailsPage() {
                   )}
                 </div>
 
-                {/* Quantity selector */}
+                {/* Interactive Selected Seats Summary */}
                 {!isSoldOut && (
                   <div className="mb-5">
                     <div className="flex justify-between text-sm text-gray-400 mb-2">
-                      <span>Ticket Quantity</span>
-                      <span className="text-xs text-gray-500">Max {Math.min(seats, 10)} per order</span>
+                      <span>Selected Seats</span>
+                      <span className="text-xs text-brand-purple font-semibold font-mono">
+                        {selectedCount} / 10
+                      </span>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <button
-                        id="qty-minus-btn"
-                        onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                        disabled={quantity <= 1}
-                        className="w-10 h-10 rounded-xl border border-brand-border flex items-center justify-center hover:border-brand-purple/50 transition disabled:opacity-30 bg-white/5 text-white"
-                      >
-                        <Minus size={15} />
-                      </button>
-                      <span className="font-bold text-xl w-10 text-center font-mono">{quantity}</span>
-                      <button
-                        id="qty-plus-btn"
-                        onClick={() => setQuantity(q => Math.min(Math.min(seats, 10), q + 1))}
-                        disabled={quantity >= Math.min(seats, 10)}
-                        className="w-10 h-10 rounded-xl border border-brand-border flex items-center justify-center hover:border-brand-purple/50 transition disabled:opacity-30 bg-white/5 text-white"
-                      >
-                        <Plus size={15} />
-                      </button>
-                    </div>
+
+                    {selectedCount === 0 ? (
+                      <div className="p-3.5 rounded-xl border border-dashed border-brand-purple/30 bg-brand-purple/5 text-center">
+                        <p className="text-xs text-gray-400">
+                          👈 Click seats on the map to select
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-1">
+                        {selectedSeats.map((sn) => (
+                          <span
+                            key={sn}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brand-purple/20 border border-brand-purple/50 text-xs font-mono font-bold text-white shadow-sm"
+                          >
+                            <span>{sn}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                socket.emit('releaseSeat', {
+                                  eventId: Number(id),
+                                  seatNumbers: [sn],
+                                });
+                                setSelectedSeats(prev => prev.filter(s => s !== sn));
+                              }}
+                              className="text-gray-400 hover:text-white ml-0.5"
+                              title="Remove seat"
+                            >
+                              &times;
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -410,12 +582,22 @@ export default function EventDetailsPage() {
                       <span className="text-white font-medium">{currentCategory.name}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span>Price ({quantity} × ₹{unitPrice.toLocaleString('en-IN')})</span>
-                      <span className="text-white font-medium">₹{(unitPrice * quantity).toLocaleString('en-IN')}</span>
+                      <span>Seats Allocated</span>
+                      <span className="text-white font-mono font-semibold">
+                        {selectedCount > 0 ? `${selectedCount} seat${selectedCount > 1 ? 's' : ''}` : 'None'}
+                      </span>
                     </div>
+                    {selectedCount > 0 && (
+                      <div className="flex justify-between">
+                        <span>Price ({selectedCount} × ₹{unitPrice.toLocaleString('en-IN')})</span>
+                        <span className="text-white font-medium">₹{(unitPrice * selectedCount).toLocaleString('en-IN')}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between font-bold text-white text-base pt-2 border-t border-brand-border/60">
                       <span>Total Amount</span>
-                      <span className="text-gradient font-display text-lg">₹{totalAmount.toLocaleString('en-IN')}</span>
+                      <span className="text-gradient font-display text-lg">
+                        ₹{(selectedCount > 0 ? totalAmount : unitPrice).toLocaleString('en-IN')}
+                      </span>
                     </div>
                   </div>
                 )}
@@ -424,14 +606,20 @@ export default function EventDetailsPage() {
                 <button
                   id="book-now-btn"
                   onClick={handleBook}
-                  disabled={isSoldOut}
+                  disabled={isSoldOut || selectedCount === 0}
                   className="w-full py-4 btn-primary justify-center font-semibold text-base disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                 >
-                  {isSoldOut ? 'Sold Out' : !isUserAuthenticated ? 'Sign In to Reserve' : `Book ${selectedTier} — ₹${totalAmount.toLocaleString('en-IN')}`}
+                  {isSoldOut
+                    ? 'Sold Out'
+                    : selectedCount === 0
+                    ? 'Select Seats on Map'
+                    : !isUserAuthenticated
+                    ? 'Sign In to Reserve'
+                    : `Book ${selectedCount} Seat${selectedCount > 1 ? 's' : ''} — ₹${totalAmount.toLocaleString('en-IN')}`}
                 </button>
 
                 <p className="text-[11px] text-gray-500 text-center mt-3">
-                  🛡️ Instant QR ticket issuance &middot; Real-time seat lock
+                  🛡️ Instant QR ticket issuance &middot; Real-time 5-min seat lock
                 </p>
               </div>
             </div>

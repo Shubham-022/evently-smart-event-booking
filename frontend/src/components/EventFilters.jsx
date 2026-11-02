@@ -123,24 +123,36 @@ export default function EventFilters({
 
         {/* Date Filter */}
         <div className="relative min-w-0 grid grid-cols-2 gap-2">
-          <input
-            id="events-date-from"
-            type="date"
-            title="From date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className={`${inputClass} px-2.5 text-xs`}
-            style={{ colorScheme: 'dark' }}
-          />
-          <input
-            id="events-date-to"
-            type="date"
-            title="To date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className={`${inputClass} px-2.5 text-xs`}
-            style={{ colorScheme: 'dark' }}
-          />
+          <div className="flex flex-col gap-1">
+            <label htmlFor="events-date-from" className="flex items-center gap-1 text-xs text-gray-400 font-medium pl-1">
+              <Calendar size={11} className="text-brand-purple" />
+              From Date
+            </label>
+            <input
+              id="events-date-from"
+              type="date"
+              title="From date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className={`${inputClass} px-2.5 text-xs`}
+              style={{ colorScheme: 'dark' }}
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="events-date-to" className="flex items-center gap-1 text-xs text-gray-400 font-medium pl-1">
+              <Calendar size={11} className="text-brand-purple" />
+              To Date
+            </label>
+            <input
+              id="events-date-to"
+              type="date"
+              title="To date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className={`${inputClass} px-2.5 text-xs`}
+              style={{ colorScheme: 'dark' }}
+            />
+          </div>
         </div>
 
         {/* Sort Dropdown */}

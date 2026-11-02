@@ -237,6 +237,9 @@ export default function AdminBookingsPage() {
                           <span className="text-[10px] font-bold uppercase tracking-wider bg-white/10 px-1.5 py-0.5 rounded text-brand-purple">
                             {b.ticket_category || 'General'}
                           </span>
+                          {b.seat_numbers && (
+                            <p className="text-[10px] font-mono text-brand-lavender mt-0.5">{b.seat_numbers}</p>
+                          )}
                         </td>
                         <td className="px-5 py-3 text-white font-medium">&#8377;{Number(b.total_amount).toLocaleString('en-IN')}</td>
                         <td className="px-5 py-3 text-gray-400 whitespace-nowrap">
@@ -309,6 +312,7 @@ export default function AdminBookingsPage() {
                   ['Event', selected.title || selected.event_title || '—'],
                   ['Ticket Tier', (selected.ticket_category || 'General').toUpperCase()],
                   ['Quantity', selected.quantity],
+                  ['Allocated Seats', selected.seat_numbers || 'Unassigned / General'],
                   ['Total Amount', `₹${Number(selected.total_amount).toLocaleString('en-IN')}`],
                   ['Booking Date', selected.booking_date ? new Date(selected.booking_date).toLocaleString('en-IN') : '—'],
                 ].map(([label, val]) => (
