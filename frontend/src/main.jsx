@@ -12,8 +12,14 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 // Register PWA service worker in supporting browser environments
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
-      console.warn('ServiceWorker registration error:', err);
-    });
+    navigator.serviceWorker
+      .register('/sw.js')
+      .then((reg) => {
+        // Trigger background check for service worker updates immediately on load
+        reg.update();
+      })
+      .catch((err) => {
+        console.warn('ServiceWorker registration error:', err);
+      });
   });
 }
