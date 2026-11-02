@@ -82,6 +82,16 @@ async function startServer() {
   try {
     const dbOk = await testConnection();
     if (!dbOk) throw new Error('Database connection test failed');
+
+    // Automatically run seat allocation & schema migration so cloud deployments
+    // always have the required event_seats table, columns, and seat rows
+    try {
+      const { migrateSeats } = await import('./scripts/migrateSeats.js');
+      await migrateSeats();
+    } catch (migErr) {
+      console.warn('⚠️ Auto seat migration warning:', migErr.message);
+    }
+
     const server = http.createServer(app);
     const io = new SocketIOServer(server, {
       cors: { origin: '*', methods: ['GET', 'POST'] },

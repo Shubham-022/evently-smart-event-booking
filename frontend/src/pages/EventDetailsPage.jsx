@@ -14,6 +14,7 @@ import SeatMap from '../components/SeatMap';
 import { useAuth } from '../contexts/AuthContext';
 import { getEventById, getEventSeats, getRelatedEvents } from '../services/eventsService';
 import { socket } from '../services/socket';
+import { generateFallbackSeats } from '../utils/seatLayout';
 
 const TICKET_CATEGORIES = [
   {
@@ -94,8 +95,14 @@ export default function EventDetailsPage() {
         const { data } = await getEventById(id);
         if (!cancelled) {
           setEvent(data);
-          setAvailableSeats(Number(data.available_seats));
+          const avail = Number(data.available_seats);
+          setAvailableSeats(avail);
           setLoading(false);
+
+          // Pre-populate seat layout immediately using event capacity so the user never sees an empty gap
+          if (data.total_seats) {
+            setSeatsData(prev => (prev && prev.length > 0 ? prev : generateFallbackSeats(data.total_seats, avail)));
+          }
 
           // Fetch related events
           try {
@@ -120,7 +127,9 @@ export default function EventDetailsPage() {
       try {
         const { data } = await getEventSeats(id);
         if (!cancelled) {
-          setSeatsData(data.seats || []);
+          if (Array.isArray(data.seats) && data.seats.length > 0) {
+            setSeatsData(data.seats);
+          }
           if (Array.isArray(data.lockedSeats)) {
             setLockedByOthers(data.lockedSeats.filter(l => l.socketId !== socket.id));
           }

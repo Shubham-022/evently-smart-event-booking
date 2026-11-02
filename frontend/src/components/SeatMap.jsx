@@ -72,8 +72,13 @@ export default function SeatMap({
 
       {/* Seat Layout Grid */}
       <div className="overflow-x-auto pb-4 pt-2">
-        <div className="min-w-fit mx-auto flex flex-col items-center gap-2.5 px-2">
-          {rows.map(([rowLabel, rowSeats]) => {
+        {rows.length === 0 ? (
+          <div className="py-8 text-center text-sm text-gray-400">
+            <p>Loading interactive seat layout…</p>
+          </div>
+        ) : (
+          <div className="min-w-fit mx-auto flex flex-col items-center gap-2.5 px-2">
+            {rows.map(([rowLabel, rowSeats]) => {
             const isRowOfSelectedTier = rowSeats.some(s => s.ticketCategory === selectedTier);
 
             return (
@@ -164,7 +169,8 @@ export default function SeatMap({
               </div>
             );
           })}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Legend */}

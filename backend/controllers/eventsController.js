@@ -9,6 +9,7 @@ import {
 } from '../services/eventsService.js';
 import pool from '../config/db.js';
 import { getLockedSeatsForEvent } from '../utils/seatLock.js';
+import { generateSeatsForTotal } from '../utils/seatLayout.js';
 
 /**
  * Validate request payload for creating an event.
@@ -264,13 +265,46 @@ export async function getSeatMap(req, res) {
   }
 
   try {
-    const [seats] = await pool.execute(
+    let [seats] = await pool.execute(
       `SELECT id, seat_number, row_label, seat_index, ticket_category, status
        FROM event_seats
        WHERE event_id = ?
        ORDER BY row_label ASC, seat_index ASC`,
       [eventId]
     );
+
+    // If no seats exist in the database for this event, auto-generate them
+    if (seats.length === 0) {
+      const [evRows] = await pool.execute(
+        'SELECT id, total_seats, available_seats FROM events WHERE id = ?',
+        [eventId]
+      );
+      if (evRows.length > 0 && evRows[0].total_seats > 0) {
+        const totalSeats = Number(evRows[0].total_seats);
+        const availSeats = Number(evRows[0].available_seats);
+        const bookedCount = Math.max(0, totalSeats - availSeats);
+        const layoutSeats = generateSeatsForTotal(totalSeats);
+
+        for (let i = 0; i < layoutSeats.length; i++) {
+          const s = layoutSeats[i];
+          const isBooked = i >= layoutSeats.length - bookedCount;
+          await pool.execute(
+            `INSERT IGNORE INTO event_seats (event_id, seat_number, row_label, seat_index, ticket_category, status)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [eventId, s.seatNumber, s.rowLabel, s.seatIndex, s.ticketCategory, isBooked ? 'booked' : 'available']
+          );
+        }
+
+        const [refetched] = await pool.execute(
+          `SELECT id, seat_number, row_label, seat_index, ticket_category, status
+           FROM event_seats
+           WHERE event_id = ?
+           ORDER BY row_label ASC, seat_index ASC`,
+          [eventId]
+        );
+        seats = refetched;
+      }
+    }
 
     const lockedSeats = getLockedSeatsForEvent(eventId);
     const lockedMap = new Map();
@@ -296,6 +330,39 @@ export async function getSeatMap(req, res) {
     });
   } catch (err) {
     console.error('Error fetching seat map:', err);
+    // If table doesn't exist yet, provide dynamic layout from event metadata
+    try {
+      const [evRows] = await pool.execute(
+        'SELECT id, total_seats, available_seats FROM events WHERE id = ?',
+        [eventId]
+      );
+      if (evRows.length > 0 && evRows[0].total_seats > 0) {
+        const total = Number(evRows[0].total_seats);
+        const avail = Number(evRows[0].available_seats);
+        const bookedCount = Math.max(0, total - avail);
+        const layout = generateSeatsForTotal(total);
+        const lockedSeats = getLockedSeatsForEvent(eventId);
+        const lockedSet = new Set(lockedSeats.map(l => l.seatNumber));
+
+        const fallbackData = layout.map((s, idx) => ({
+          id: idx + 1,
+          seatNumber: s.seatNumber,
+          rowLabel: s.rowLabel,
+          seatIndex: s.seatIndex,
+          ticketCategory: s.ticketCategory,
+          status: idx >= layout.length - bookedCount ? 'booked' : lockedSet.has(s.seatNumber) ? 'locked' : 'available',
+        }));
+
+        return res.json({
+          eventId,
+          totalSeats: total,
+          seats: fallbackData,
+          lockedSeats,
+        });
+      }
+    } catch {
+      // Fall through to 500
+    }
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
